@@ -109,7 +109,7 @@ public:
         node *p = current;
         int count = 0;
         if(p->black) count++;
-        count += std::max(black_height(p->left), black_height(p->right));
+        count += max(black_height(p->left), black_height(p->right));
         return count;
     }
 
@@ -150,7 +150,7 @@ public:
         if(y == root) root = x;
         return x;
     }
-    
+
     node *get_uncle(node *current){
         if(!current || !current->parent || !current->parent->parent) return NULL;
         node *father = current->parent;
@@ -267,61 +267,176 @@ public:
 
         node *y = z;  // Node to be deleted
         node *x = nullptr;  // Child of y
-        if(sibling->left == nullptr || sibling->left->black){
-            if(sibling->right) sibling->right->black = true;
-            sibling->black = false;
-            rotate_left(sibling);
-            sibling = x->parent->left;
+        // Determine y (either z or its successor)
+        bool y_original_color = y->black;
+
+        if(z->left == nullptr){
+            x = z->right;
+            transplant(z, z->right);
+        }
+        else if(z->right == nullptr){
+            x = z->left;
+            transplant(z, z->left);
+        }
+        else{
+            // Node has two children
+            y = successor(z);  // Find in-order successor
+            y_original_color = y->black;
+            x = y->right;
+
+            if(y->parent == z){
+                if(x) x->parent = y;
+            }
+            else{
+                transplant(y, y->right);
+                y->right = z->right;
+                if(y->right) y->right->parent = y;
+            }
+
+            transplant(z, y);
+            y->left = z->left;
+            if(y->left) y->left->parent = y;
+            y->black = z->black;
         }
 
-        // Case 4: Sibling's left child is RED
-        sibling->black = x->parent->black;
-        x->parent->black = true;
-        if(sibling->left) sibling->left->black = true;
-        rotate_right(x->parent);
-        x = root;  // Terminate loop
+        delete z;
+        size--;
+
+        // If the removed node was black, fix the tree
+        if(y_original_color){
+            fix_delete(x);
+        }
     }
-}
-}
 
-if(x) x->black = true;
-}
+    void transplant(node *u, node *v){
+        if(!u->parent){
+            root = v;
+        }
+        else if(u == u->parent->left){
+            u->parent->left = v;
+        }
+        else{
+            u->parent->right = v;
+        }
 
-void print(node *current) { // inOrder
-    if (!current) return;
-    print(current->left);
-    std::cout << (current->black ? "B" : "R") << current->data << " ";
-    print(current->right);
-}
+        if(v){
+            v->parent = u->parent;
+        }
+    }
 
-void print() {
-    print(root);
-    std::cout << std::endl;
-}
+    void fix_delete(node *x){
+        while(x != root && (x == nullptr || x->black)){
+            if(x == nullptr) break;
 
-bool isLeaf(node *p) {
-    if (!p) return false;
-    return (p->left == nullptr && p->right == nullptr);
-}
+            node *sibling = get_sibling(x);
 
-void clear(node* current) { // postfix
-    if (!current) return;
-    clear(current->left);
-    clear(current->right);
-    delete current;
-}
+            if(x == x->parent->left){
+                // Case 1: Sibling is RED
+                if(sibling && !sibling->black){
+                    sibling->black = true;
+                    x->parent->black = false;
+                    rotate_left(x->parent);
+                    sibling = x->parent->right;
+                }
 
-bool empty(){
-    return size == 0;
-}
+                // Case 2: Sibling and both its children are BLACK
+                if((!sibling || (sibling->left == nullptr || sibling->left->black) &&
+                                (sibling->right == nullptr || sibling->right->black))){
+                    if(sibling) sibling->black = false;
+                    x = x->parent;
+                }
+                else{
+                    // Case 3: Sibling's right child is BLACK, left child is RED
+                    if(sibling->right == nullptr || sibling->right->black){
+                        if(sibling->left) sibling->left->black = true;
+                        sibling->black = false;
+                        rotate_right(sibling);
+                        sibling = x->parent->right;
+                    }
 
-int getSize(){
-    return size;
-}
+                    // Case 4: Sibling's right child is RED
+                    sibling->black = x->parent->black;
+                    x->parent->black = true;
+                    if(sibling->right) sibling->right->black = true;
+                    rotate_left(x->parent);
+                    x = root;  // Terminate loop
+                }
+            }
+            else{
+                // Symmetric cases for right child
+                sibling = x->parent->left;
 
-// Destructor
-~RBT() {
-    clear(root);
-}
+                // Case 1: Sibling is RED
+                if(sibling && !sibling->black){
+                    sibling->black = true;
+                    x->parent->black = false;
+                    rotate_right(x->parent);
+                    sibling = x->parent->left;
+                }
+
+                // Case 2: Sibling and both its children are BLACK
+                if((!sibling || (sibling->left == nullptr || sibling->left->black) &&
+                                (sibling->right == nullptr || sibling->right->black))){
+                    if(sibling) sibling->black = false;
+                    x = x->parent;
+                }
+                else{
+                    // Case 3: Sibling's left child is BLACK, right child is RED
+                    if(sibling->left == nullptr || sibling->left->black){
+                        if(sibling->right) sibling->right->black = true;
+                        sibling->black = false;
+                        rotate_left(sibling);
+                        sibling = x->parent->left;
+                    }
+
+                    // Case 4: Sibling's left child is RED
+                    sibling->black = x->parent->black;
+                    x->parent->black = true;
+                    if(sibling->left) sibling->left->black = true;
+                    rotate_right(x->parent);
+                    x = root;  // Terminate loop
+                }
+            }
+        }
+
+        if(x) x->black = true;
+    }
+
+    void print(node *current) { // inOrder
+        if (!current) return;
+        print(current->left);
+        std::cout << (current->black ? "B" : "R") << current->data << " ";
+        print(current->right);
+    }
+
+    void print() {
+        print(root);
+        std::cout << std::endl;
+    }
+
+    bool isLeaf(node *p) {
+        if (!p) return false;
+        return (p->left == nullptr && p->right == nullptr);
+    }
+
+    void clear(node* current) { // postfix
+        if (!current) return;
+        clear(current->left);
+        clear(current->right);
+        delete current;
+    }
+
+    bool empty(){
+        return size == 0;
+    }
+
+    int getSize(){
+        return size;
+    }
+
+    // Destructor
+    ~RBT() {
+        clear(root);
+    }
 };
 
